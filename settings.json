@@ -1,0 +1,6 @@
+{
+    "rust-client.showStdErr": true,
+
+    "rust-client.logToFile": true,
+}
+

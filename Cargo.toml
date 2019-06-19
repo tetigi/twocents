@@ -1,0 +1,9 @@
+[package]
+name = "twocents"
+version = "0.1.0"
+authors = ["Luke Tomlin <luke.tomlin@gmail.com>"]
+edition = "2018"
+
+[dependencies]
+scraper = "0.10.0"
+reqwest = "0.9.18"

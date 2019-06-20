@@ -114,7 +114,11 @@ fn extract_sentences(fragment: &str) -> Vec<&str> {
     let mut sentences = vec![];
 
     for slice in valid_periods.windows(2) {
-        sentences.push(fragment[slice[0]..slice[1]].trim());
+        let sentence = fragment[slice[0]..slice[1]].trim();
+
+        if sentence.len() > 1 {
+            sentences.push(sentence);
+        }
     }
 
     sentences
@@ -155,6 +159,16 @@ mod tests {
         assert_eq!(
             vec!["The dog.", "Runs around"],
             extract_sentences("The dog. Runs around")
+        );
+
+        assert_eq!(
+            vec!["The dog.", "Runs around."],
+            extract_sentences("The dog. Runs around.")
+        );
+
+        assert_eq!(
+            vec!["The dog.", "Runs around"],
+            extract_sentences("The dog... Runs around")
         );
     }
 }

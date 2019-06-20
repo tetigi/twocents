@@ -13,11 +13,15 @@ const BBC_SEARCH: &str =
 #[derive(Debug)]
 struct Article {
     url: String,
+    quotes: Vec<String>,
 }
 
 impl Article {
     fn from(url: String) -> Article {
-        Article { url }
+        Article {
+            url,
+            quotes: vec![],
+        }
     }
 }
 
@@ -45,10 +49,12 @@ fn search_bbc(query: &str, depth: usize) -> Vec<Article> {
 
     let query = query_without_duped_spaces.replace(" ", "+").to_lowercase();
 
-    for i in 0..depth {
+    for i in 1..=depth {
         let url = BBC_SEARCH
             .replace("{query}", &query)
             .replace("{page}", &i.to_string());
+
+        println!("Searching: {}", url);
 
         let mut resp = reqwest::get(&url).unwrap();
         let body = resp.text().unwrap();
@@ -80,40 +86,38 @@ fn extract_sentences(fragment: &str) -> Vec<&str> {
         .filter(|(_, c)| *c == '"')
         .map(|x| x.0)
         .collect();
-    let periods: Vec<usize> = fragment
+    let stops: Vec<usize> = fragment
         .chars()
         .enumerate()
-        .filter(|(_, c)| *c == '.')
+        .filter(|(_, c)| *c == '.' || *c == '!' || *c == '?')
         .map(|x| x.0)
         .collect();
 
     let mut quote_cursor = 0;
-    let mut valid_periods = vec![0];
+    let mut valid_stops = vec![0];
 
-    println!("Found these periods: {:?}", periods);
-
-    for period_i in periods.into_iter() {
-        while quotes[quote_cursor..].len() >= 2 && quotes[quote_cursor + 1] < period_i {
+    for stop_i in stops.into_iter() {
+        while quotes[quote_cursor..].len() >= 2 && quotes[quote_cursor + 1] < stop_i {
             quote_cursor += 2;
         }
 
-        if quotes[quote_cursor..].len() > 0 {
+        if quotes[quote_cursor..].len() > 1 {
             let quote_start = quotes[quote_cursor];
             let quote_end = quotes[quote_cursor + 1];
 
-            if period_i > quote_start && period_i < quote_end {
+            if stop_i > quote_start && stop_i < quote_end {
                 continue;
             }
         }
 
-        valid_periods.push(period_i + 1);
+        valid_stops.push(stop_i + 1);
     }
 
-    valid_periods.push(fragment.len());
+    valid_stops.push(fragment.len());
 
     let mut sentences = vec![];
 
-    for slice in valid_periods.windows(2) {
+    for slice in valid_stops.windows(2) {
         let sentence = fragment[slice[0]..slice[1]].trim();
 
         if sentence.len() > 1 {
@@ -124,7 +128,7 @@ fn extract_sentences(fragment: &str) -> Vec<&str> {
     sentences
 }
 
-fn extract_story_bbc(url: &str) -> String {
+fn extract_story_bbc(url: &str) -> Vec<String> {
     let mut resp = reqwest::get(url).unwrap();
     let body = resp.text().unwrap();
     let fragment = Html::parse_document(&body);
@@ -137,17 +141,28 @@ fn extract_story_bbc(url: &str) -> String {
         all_text.append(&mut text);
     }
 
-    all_text.join("\n\n\n")
+    all_text.into_iter().map(|s| s.to_string()).collect()
 }
 
 fn main() {
     println!("Hello, world!");
 
-    //let _ = search_bbc("boris johnson", 10);
-    println!(
-        "{}",
-        extract_story_bbc("https://www.bbc.com/news/uk-politics-48299424")
-    );
+    let articles = search_bbc("boris johnson", 1);
+
+    for mut article in articles {
+        let paragraphs = extract_story_bbc(&article.url);
+
+        for p in paragraphs {
+            let sentences = extract_sentences(&p);
+            for s in sentences {
+                if has_quote(&s) {
+                    article.quotes.push(s.to_string());
+                }
+            }
+        }
+
+        println!("{:#?}", article);
+    }
 }
 
 #[cfg(test)]
@@ -160,15 +175,29 @@ mod tests {
             vec!["The dog.", "Runs around"],
             extract_sentences("The dog. Runs around")
         );
+    }
 
+    #[test]
+    fn test_sentence_extraction_hanging_period() {
         assert_eq!(
             vec!["The dog.", "Runs around."],
             extract_sentences("The dog. Runs around.")
         );
+    }
 
+    #[test]
+    fn test_sentence_extraction_ellipsis() {
         assert_eq!(
             vec!["The dog.", "Runs around"],
             extract_sentences("The dog... Runs around")
+        );
+    }
+
+    #[test]
+    fn test_sentence_extraction_with_quotes() {
+        assert_eq!(
+            vec!["The \"dog. Runs around\" does it?", "Yes"],
+            extract_sentences("The \"dog. Runs around\" does it? Yes")
         );
     }
 }
